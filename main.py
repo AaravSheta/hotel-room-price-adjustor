@@ -1,0 +1,125 @@
+"""
+main.py
+Real-Time Dynamic Hotel Room Pricing Engine
+Operations Research: Dynamic Programming (Bellman MDP) & Linear Programming (Network RM)
+
+Author: Operations Research & Revenue Management Expert
+Target: Python / VS Code Environment (Runs 100% Offline)
+"""
+
+import os
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+import argparse
+import sys
+import pandas as pd
+
+from src.data_generator import generate_market_conditions
+from src.demand_model import HotelDemandModel
+from src.dp_solver import DynamicProgrammingPricingSolver
+from src.lp_solver import LinearProgrammingRevenueSolver
+from src.pricing_engine import HotelPricingEngine
+
+
+def print_banner():
+    banner = r"""
+========================================================================================
+   REAL-TIME DYNAMIC HOTEL ROOM PRICING ENGINE
+   Operations Research: Markov Decision Process (DP) & Network Revenue Management (LP)
+========================================================================================
+"""
+    print(banner)
+
+
+def demonstrate_single_state_decision(engine: HotelPricingEngine, unsold_rooms: int = 25, days_left: int = 5):
+    """
+    Demonstrate granular OR decision-making at an exact snapshot in time.
+    """
+    print("\n" + "=" * 90)
+    print(f" [SNAPSHOT EVALUATION] Real-Time State: {unsold_rooms} Unsold Rooms, T-{days_left} Days Remaining")
+    print("=" * 90)
+
+    # Fetch corresponding market feed for T-days_left
+    row = engine.market_df[engine.market_df["days_to_checkin"] == days_left]
+    if not row.empty:
+        comp_price = float(row["competitor_avg_price"].iloc[0])
+        elasticity = float(row["price_elasticity_factor"].iloc[0])
+        base_demand = float(row["base_demand_rate"].iloc[0])
+    else:
+        comp_price, elasticity, base_demand = 175.0, 1.45, 4.2
+
+    eval_result = engine.evaluate_realtime_pricing(
+        current_unsold_rooms=unsold_rooms,
+        days_to_checkin=days_left,
+        competitor_price=comp_price,
+        base_demand_rate=base_demand,
+        price_elasticity=elasticity
+    )
+
+    base = eval_result["baseline"]
+    dp = eval_result["dynamic_programming"]
+    lp = eval_result["linear_programming"]
+
+    print(f" Market Conditions Feed:")
+    print(f"   * Competitor Avg Rate:     ${comp_price:.2f}")
+    print(f"   * Current Occupancy:       {eval_result['occupancy_rate']*100:.1f}% ({engine.total_rooms - unsold_rooms}/{engine.total_rooms} rooms booked)")
+    print(f"   * Price Elasticity Factor: {elasticity:.2f} (Inelastic last-minute market)")
+    print(f"   * Base Demand Intensity:   {base_demand:.2f} arrivals/day")
+    print("-" * 90)
+
+    p_base_str = f"{base['booking_probability']*100:.1f}%"
+    p_dp_str = f"{dp['booking_probability']*100:.1f}%"
+    p_lp_str = f"{lp['booking_probability']*100:.1f}%"
+
+    print(f"{'Decision Dimension':<30} | {'Baseline (Static)':<18} | {'Dynamic Prog (MDP)':<18} | {'Linear Prog (NRM)':<18}")
+    print("-" * 90)
+    print(f"{'Recommended Price ($)':<30} | ${base['price']:<17.2f} | ${dp['price']:<17.2f} | ${lp['price']:<17.2f}")
+    print(f"{'Booking Probability / Epoch':<30} | {p_base_str:<18} | {p_dp_str:<18} | {p_lp_str:<18}")
+    print(f"{'Capacity Bid Price (Shadow)':<30} | {'N/A (Static)':<18} | ${dp['marginal_bid_price']:<17.2f} | ${lp['shadow_price_capacity']:<17.2f}")
+    print(f"{'Expected Future Value ($)':<30} | {'N/A (Myopic)':<18} | ${dp['expected_future_revenue']:<17.2f} | ${lp['weighted_avg_price'] * unsold_rooms:<17.2f}")
+    print(f"{'Competitor Price Index':<30} | {base['price']/comp_price:<18.3f} | {dp['price']/comp_price:<18.3f} | {lp['competitor_price_index']:<18.3f}")
+    print("=" * 90)
+    print(f" [ANALYSIS] Unsold inventory is scarce ({unsold_rooms} rooms with {days_left} days left).")
+    print(f"            DP elevates price to ${dp['price']:.2f} because marginal opportunity cost is ${dp['marginal_bid_price']:.2f}.")
+    print(f"            LP segments inventory into Premium/Standard to preserve RevPAR while respecting CPI limits.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Real-Time Dynamic Hotel Room Pricing Engine")
+    parser.add_argument("--rooms", type=int, default=100, help="Total hotel room capacity (default: 100)")
+    parser.add_argument("--base-price", type=float, default=140.0, help="Baseline fixed room rate ($) (default: 140.0)")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+    parser.add_argument("--dataset", type=str, default="data/market_conditions.csv", help="Path to market CSV")
+    parser.add_argument("--regen-data", action="store_true", help="Force regenerate synthetic market dataset")
+    args = parser.parse_args()
+
+    print_banner()
+
+    # Step 1: Ingest or Generate Dataset
+    if args.regen_data or not os.path.exists(args.dataset):
+        print(f"[Phase 1] Generating synthetic market dataset (zero external APIs)...")
+        generate_market_conditions(output_path=args.dataset, total_days=30, total_rooms=args.rooms, random_seed=args.seed)
+    else:
+        print(f"[Phase 1] Ingesting offline market conditions from '{args.dataset}'...")
+
+    # Step 2: Initialize Core Optimization Engine
+    print(f"[Phase 2] Initializing OR Pricing Engine (DP Bellman MDP + LP Network RM)...")
+    engine = HotelPricingEngine(
+        total_rooms=args.rooms,
+        baseline_fixed_price=args.base_price,
+        dataset_path=args.dataset,
+        random_seed=args.seed
+    )
+
+    # Step 3: Granular Snapshot Demonstration
+    demonstrate_single_state_decision(engine, unsold_rooms=20, days_left=4)
+
+    # Step 4: Run Full Event-Driven Booking Simulation with Dynamic Trigger Recalculation
+    print("\n[Phase 3] Launching Real-Time Booking Simulation Horizon (30 Days)...")
+    results = engine.run_simulation(verbose=True, max_triggers_to_print=12)
+
+    print("[Complete] Dynamic pricing engine execution finished successfully.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
