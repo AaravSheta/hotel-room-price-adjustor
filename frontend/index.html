@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic Hotel Room Pricing Engine (INR ₹) | OR Dashboard</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-3 shadow-sm">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <i class="bi bi-buildings-fill text-primary fs-4"></i>
+        <span>Hotel Revenue Management Engine (INR ₹)</span>
+      </a>
+      <div class="d-flex align-items-center gap-3">
+        <span class="badge py-2 px-3 rounded-pill" id="apiStatusBadge">
+          <i class="bi bi-arrow-repeat spin"></i> Checking API...
+        </span>
+        <span class="text-secondary small d-none d-md-inline">Operations Research: MDP & Network LP</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <div class="container-fluid px-4 py-4">
+    <div class="row g-4">
+
+      <!-- Left Column: Input Control Panel -->
+      <div class="col-lg-4 col-xl-4">
+        <div class="card h-100 shadow-sm border-0 position-relative">
+          <div class="card-header bg-white py-3 border-bottom">
+            <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+              <i class="bi bi-sliders text-primary"></i> Market Feed & Controls (₹)
+            </h5>
+            <small class="text-muted">Adjust real-time variables to recompute optimal rates</small>
+          </div>
+          <div class="card-body p-4">
+
+            <!-- Preset Scenarios -->
+            <div class="mb-4">
+              <label class="form-label text-muted small fw-bold">QUICK SCENARIO PRESETS</label>
+              <div class="d-flex flex-wrap gap-1">
+                <button type="button" class="btn btn-outline-secondary preset-btn" onclick="applyPreset(30, 20, 4800, 'Early Window')">Early (30d, 20% Occ, ₹4.8k)</button>
+                <button type="button" class="btn btn-outline-secondary preset-btn" onclick="applyPreset(14, 60, 6500, 'Mid-Curve')">Mid (14d, 60% Occ, ₹6.5k)</button>
+                <button type="button" class="btn btn-outline-secondary preset-btn" onclick="applyPreset(3, 85, 8500, 'Last-Minute Surge')">Last-Min (3d, 85% Occ, ₹8.5k)</button>
+                <button type="button" class="btn btn-outline-secondary preset-btn" onclick="applyPreset(7, 35, 5200, 'Soft Demand')">Soft (7d, 35% Occ, ₹5.2k)</button>
+              </div>
+            </div>
+
+            <form id="pricingForm" onsubmit="event.preventDefault(); calculateOptimalPrice();">
+
+              <!-- Days to Check-in -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label for="daysToCheckin" class="form-label fw-semibold mb-0">Days to Check-in</label>
+                  <span class="badge bg-primary-subtle text-primary fw-bold" id="daysValueDisplay">10 days</span>
+                </div>
+                <input type="range" class="form-range" id="daysRange" min="1" max="30" value="10" oninput="syncDays(this.value)">
+                <input type="number" class="form-control form-control-sm mt-1" id="daysInput" min="1" max="30" value="10" oninput="syncDays(this.value)">
+              </div>
+
+              <!-- Current Occupancy -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label for="occupancyRate" class="form-label fw-semibold mb-0">Current Occupancy</label>
+                  <span class="badge bg-primary-subtle text-primary fw-bold" id="occupancyValueDisplay">75%</span>
+                </div>
+                <input type="range" class="form-range" id="occupancyRange" min="0" max="100" value="75" oninput="syncOccupancy(this.value)">
+                <div class="input-group input-group-sm mt-1">
+                  <input type="number" class="form-control" id="occupancyInput" min="0" max="100" value="75" oninput="syncOccupancy(this.value)">
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+
+              <!-- Competitor Average Price -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label for="compPrice" class="form-label fw-semibold mb-0">Competitor Average Price (₹)</label>
+                  <span class="badge bg-primary-subtle text-primary fw-bold" id="compPriceValueDisplay">₹6,500.00</span>
+                </div>
+                <input type="range" class="form-range" id="compPriceRange" min="2000" max="25000" step="100" value="6500" oninput="syncCompPrice(this.value)">
+                <div class="input-group input-group-sm mt-1">
+                  <span class="input-group-text">₹</span>
+                  <input type="number" class="form-control" id="compPriceInput" min="1500" max="50000" step="50" value="6500.00" oninput="syncCompPrice(this.value)">
+                </div>
+              </div>
+
+              <!-- Baseline Static Price -->
+              <div class="mb-4">
+                <label for="basePrice" class="form-label fw-semibold mb-1">Baseline Static Price (Fixed benchmark)</label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">₹</span>
+                  <input type="number" class="form-control" id="basePriceInput" min="1500" max="50000" step="50" value="5500.00">
+                </div>
+              </div>
+
+              <!-- Collapsible Advanced Settings -->
+              <div class="mb-4">
+                <a class="text-decoration-none small d-flex align-items-center gap-1 text-secondary" data-bs-toggle="collapse" href="#advancedSettings" role="button">
+                  <i class="bi bi-gear"></i> Advanced Elasticity & Demand Settings
+                </a>
+                <div class="collapse mt-2 p-3 bg-light rounded" id="advancedSettings">
+                  <div class="mb-2">
+                    <label class="form-label small fw-semibold">Total Hotel Rooms</label>
+                    <input type="number" class="form-control form-control-sm" id="totalRoomsInput" value="100">
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label small fw-semibold">Price Elasticity Factor (optional)</label>
+                    <input type="number" class="form-control form-control-sm" id="elasticityInput" step="0.05" placeholder="Auto-calculated if blank">
+                  </div>
+                  <div class="mb-0">
+                    <label class="form-label small fw-semibold">Base Demand Intensity (arrivals/day)</label>
+                    <input type="number" class="form-control form-control-sm" id="demandRateInput" step="0.1" placeholder="Auto-calculated if blank">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Submit Button -->
+              <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2" id="calcBtn">
+                <i class="bi bi-cpu-fill"></i> Calculate Optimal Price
+              </button>
+
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Results Section -->
+      <div class="col-lg-8 col-xl-8">
+
+        <!-- Top KPI Cards Row -->
+        <div class="row g-3 mb-4">
+          <!-- 1. Baseline Price Card -->
+          <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 kpi-card kpi-baseline shadow-sm border-0">
+              <span class="kpi-label">Baseline Static Price</span>
+              <div class="kpi-value text-secondary mt-2" id="kpiBaseline">₹5,500</div>
+              <small class="text-muted mt-auto pt-2">Fixed unmanaged price</small>
+            </div>
+          </div>
+
+          <!-- 2. Dynamic Programming (MDP) Card -->
+          <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 kpi-card kpi-dp shadow-sm border-0">
+              <span class="kpi-label">DP Optimized Price</span>
+              <div class="kpi-value text-primary mt-2" id="kpiDpPrice">₹---</div>
+              <div class="d-flex align-items-center gap-1 mt-auto pt-2">
+                <span class="badge bg-primary-subtle text-primary small" id="kpiDpDelta">--</span>
+                <small class="text-muted">Bellman MDP</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Linear Programming (NRM) Card -->
+          <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 kpi-card kpi-lp shadow-sm border-0">
+              <span class="kpi-label">LP Optimized Price</span>
+              <div class="kpi-value text-info mt-2" id="kpiLpPrice">₹---</div>
+              <div class="d-flex align-items-center gap-1 mt-auto pt-2">
+                <span class="badge bg-info-subtle text-info small" id="kpiLpDelta">--</span>
+                <small class="text-muted">Network RM</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Projected Revenue Lift Card -->
+          <div class="col-6 col-md-3">
+            <div class="card h-100 p-3 kpi-card kpi-lift shadow-sm border-0">
+              <span class="kpi-label">Projected Revenue Lift</span>
+              <div class="kpi-value text-success mt-2" id="kpiRevLift">--%</div>
+              <div class="d-flex align-items-center gap-1 mt-auto pt-2">
+                <span class="badge bg-success-subtle text-success small" id="kpiRevLiftAbs">+₹0.00</span>
+                <small class="text-muted">vs Baseline</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Middle Row: Chart & Detailed Comparison Table -->
+        <div class="row g-4 mb-4">
+
+          <!-- Price Comparison Bar Chart -->
+          <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0 p-3">
+              <h6 class="card-title fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                <i class="bi bi-bar-chart-fill text-primary"></i> Price Point Comparison (₹)
+              </h6>
+              <div class="chart-container">
+                <canvas id="priceComparisonChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- LP Customer Segment Allocation -->
+          <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0 p-3">
+              <h6 class="card-title fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                <i class="bi bi-pie-chart-fill text-info"></i> LP Capacity Allocation by Segment
+              </h6>
+              <div class="mb-3">
+                <div class="d-flex justify-content-between small fw-semibold mb-1">
+                  <span><i class="bi bi-circle-fill text-secondary small"></i> Budget / Leisure Segment</span>
+                  <span id="allocBudgetVal">0 rooms (₹0.00)</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                  <div class="progress-bar bg-secondary" id="allocBudgetBar" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <div class="d-flex justify-content-between small fw-semibold mb-1">
+                  <span><i class="bi bi-circle-fill text-primary small"></i> Standard / Transient Segment</span>
+                  <span id="allocStandardVal">0 rooms (₹0.00)</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                  <div class="progress-bar bg-primary" id="allocStandardBar" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <div class="d-flex justify-content-between small fw-semibold mb-1">
+                  <span><i class="bi bi-circle-fill text-warning small"></i> Premium / Corporate Segment</span>
+                  <span id="allocPremiumVal">0 rooms (₹0.00)</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                  <div class="progress-bar bg-warning" id="allocPremiumBar" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div class="mt-auto pt-2 border-top">
+                <small class="text-muted d-block" id="lpCpiNote">Competitor Price Index: 1.000 (Within 0.88 - 1.25 corridor)</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailed OR Metrics Breakdown Table -->
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h6 class="card-title mb-0 fw-bold d-flex align-items-center gap-2">
+              <i class="bi bi-table text-primary"></i> Operations Research Engine Breakdown (INR ₹)
+            </h6>
+            <span class="badge bg-light text-dark border" id="inventoryStatePill">25 Rooms Available</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col" style="width: 28%;">Decision Metric</th>
+                  <th scope="col" style="width: 24%;">Baseline (Static)</th>
+                  <th scope="col" style="width: 24%;">Dynamic Programming (MDP)</th>
+                  <th scope="col" style="width: 24%;">Linear Programming (NRM)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="fw-semibold">Recommended Rate</td>
+                  <td id="tblBasePrice">₹5,500.00</td>
+                  <td class="fw-bold text-primary" id="tblDpPrice">₹---</td>
+                  <td class="fw-bold text-info" id="tblLpPrice">₹---</td>
+                </tr>
+                <tr>
+                  <td class="fw-semibold">Capacity Bid Price / Shadow Price</td>
+                  <td class="text-muted">N/A (Fixed)</td>
+                  <td id="tblDpBid">₹--- <small class="text-muted">(Marginal Value ΔV)</small></td>
+                  <td id="tblLpShadow">₹--- <small class="text-muted">(Dual Marginal μ)</small></td>
+                </tr>
+                <tr>
+                  <td class="fw-semibold">Booking Probability / Epoch</td>
+                  <td id="tblBaseProb">--%</td>
+                  <td id="tblDpProb">--%</td>
+                  <td id="tblLpProb">--%</td>
+                </tr>
+                <tr>
+                  <td class="fw-semibold">Competitor Price Index (p / p_comp)</td>
+                  <td id="tblBaseCpi">--</td>
+                  <td id="tblDpCpi">--</td>
+                  <td id="tblLpCpi">--</td>
+                </tr>
+                <tr>
+                  <td class="fw-semibold">Projected Revenue</td>
+                  <td id="tblBaseRev">₹---</td>
+                  <td class="text-success fw-bold" id="tblDpRev">₹---</td>
+                  <td class="text-success fw-bold" id="tblLpRev">₹---</td>
+                </tr>
+                <tr>
+                  <td class="fw-semibold">OR Strategy Logic</td>
+                  <td class="small text-muted">Fixed price without real-time inventory responsiveness.</td>
+                  <td class="small text-muted" id="tblDpNote">Bellman backward induction maximizes expected revenue over finite horizon.</td>
+                  <td class="small text-muted" id="tblLpNote">Deterministic LP rationing capacity across segments under CPI constraints.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap 5 JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Custom Application JS -->
+  <script src="app.js"></script>
+</body>
+</html>
