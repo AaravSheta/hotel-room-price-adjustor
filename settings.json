@@ -1,8 +1,0 @@
-{
-  "python.defaultInterpreterPath": "C:\\Users\\aarav\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
-  "python.terminal.activateEnvironment": true,
-  "terminal.integrated.env.windows": {
-    "OPENBLAS_NUM_THREADS": "1"
-  }
-}
-
