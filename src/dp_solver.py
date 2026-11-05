@@ -175,16 +175,25 @@ class DynamicProgrammingPricingSolver:
         exp_rev = float(V[c, days])
         bid_p = float(bid_prices[c, days])
 
-        # Booking probability (P >= 1 arrival per day at optimal price)
+        # Booking probability per decision epoch (consistent with demand_model, baseline, and LP)
+        prob_epoch = self.demand_model.booking_probability_poisson(
+            price=opt_p,
+            competitor_price=competitor_price,
+            base_daily_demand=base_daily_demand,
+            elasticity=elasticity
+        )
+
+        # Full-day booking probability (P >= 1 arrival in 24 hours)
         price_ratio = opt_p / competitor_price
-        lam = base_daily_demand * (price_ratio ** (-elasticity))
-        prob_day = float(np.clip(1.0 - np.exp(-lam), 0.0, 1.0))
+        lam_day = base_daily_demand * (price_ratio ** (-elasticity))
+        prob_day = float(np.clip(1.0 - np.exp(-lam_day), 0.0, 1.0))
 
         return {
             "optimal_price": float(round(opt_p, 2)),
             "expected_future_revenue": float(round(exp_rev, 2)),
             "marginal_bid_price": float(round(bid_p, 2)),
-            "booking_probability": float(round(prob_day, 4)),
+            "booking_probability": float(round(prob_epoch, 4)),
+            "booking_probability_daily": float(round(prob_day, 4)),
             "periods_remaining": days,
             "competitor_price_ratio": float(round(price_ratio, 3))
         }
